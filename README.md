@@ -50,22 +50,28 @@ mpv 会自动识别可执行文件旁的 `portable_config/`。超分 shader（Al
 
 ### Windows + NVIDIA：fruc_vulkan
 
-本项目不使用 NVIDIA App 的 Smooth Motion，也不依赖 VapourSynth。Windows 下检测到低于 60 fps 的视频时，配置会自动加载 FFmpeg 的 `fruc_vulkan` 滤镜：
+本项目不使用 NVIDIA App 的 Smooth Motion，也不依赖 VapourSynth。Windows 下检测到低于 60 fps 的视频时，配置会自动加载 FFmpeg 的 `fruc_vulkan` 滤镜。1080p 及以下使用最高质量的 `perf=slow`，高于 1080p（包括 2160p）使用更注重实时性能的 `perf=fast`：
 
 ```ini
 [fruc-vulkan]
-profile-cond=platform == "windows" and container_fps > 0 and container_fps < 60
+profile-cond=platform == "windows" and container_fps > 0 and container_fps < 60 and height <= 1080
 profile-restore=copy
 vf-append=@frc-input:format=fmt=vulkan
 vf-append=@frc:fruc_vulkan=fps=60:perf=slow
+
+[fruc-vulkan-2160p]
+profile-cond=platform == "windows" and container_fps > 0 and container_fps < 60 and height > 1080
+profile-restore=copy
+vf-append=@frc-input:format=fmt=vulkan
+vf-append=@frc:fruc_vulkan=fps=60:perf=fast
 ```
 
-`fruc_vulkan` 是 FFmpeg libavfilter 内置滤镜，通过 Vulkan 的 `VK_NV_optical_flow` 扩展在 NVIDIA Optical Flow Accelerator 上计算双向光流，并合成运动补偿中间帧。本项目使用最高质量的 `perf=slow`，目标帧率为 60 fps。
+`fruc_vulkan` 是 FFmpeg libavfilter 内置滤镜，通过 Vulkan 的 `VK_NV_optical_flow` 扩展在 NVIDIA Optical Flow Accelerator 上计算双向光流，并合成运动补偿中间帧，目标帧率为 60 fps。本项目为 1080p 及以下使用最高质量的 `perf=slow`，为高于 1080p（包括 2160p）使用更注重实时性能的 `perf=fast`；两个档位均不显式指定 `grid`，使用滤镜默认值。
 
 - **硬件**：需要支持 Vulkan Optical Flow 的 NVIDIA 显卡；建议 Ampere / RTX 30 系及更新架构
 - **软件**：需要 2026-09-02 之后构建、且包含 `fruc_vulkan` 的 mpv/FFmpeg，以及最新 NVIDIA 驱动。可用 `mpv --vf=help | findstr fruc_vulkan` 检查滤镜是否存在
 - **数据路径**：`@frc-input` 使用 `format=fmt=vulkan` 为 FRC 准备输入帧；需要时会执行格式转换或上传，再交给 `fruc_vulkan`
-- **质量/性能**：4K 等高分辨率若无法实时播放，可把 `perf=slow` 改为 `medium` 或 `fast`，也可增加 `grid=2` / `grid=4` 降低光流开销
+- **质量/性能**：`perf` 是光流计算的性能预设：`slow` 计算更充分、质量较高但开销最大，`medium` 在质量与速度间折中，`fast` 最快，但复杂运动和遮挡区域更容易出现扭曲或重影。`grid` 是光流矢量网格粒度：`grid=1` 最精细、开销最大，`grid=2` 和 `grid=4` 会依次使用更粗的网格来降低开销，但小物体和运动边缘的精度可能下降。因此，4K 等高分辨率若无法实时播放，可先把 `perf=slow` 改为 `medium` 或 `fast`，仍不流畅时再把 `grid` 增加到 `2` 或 `4`
 - **临时开关**：`Alt+4` 原子切换 FRC 输入准备和 FRUC 两个滤镜
 - 此处的 FFmpeg 指 mpv 内部链接的库；无需另外安装 `ffmpeg` 命令行程序，FRUC 也不会启动额外进程
 
